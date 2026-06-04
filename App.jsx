@@ -1,18 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-// ============================================================
-// SUPABASE SETUP
-// Replace these with your own Supabase project credentials
-// ============================================================
 const SUPABASE_URL = "https://tmlhnmnxfvzjximrjchl.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRtbGhubW54ZnZ6anhpbXJqY2hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0OTg5NzgsImV4cCI6MjA5NjA3NDk3OH0.7WPuWsFpQYOQMF4h54zkmtihvSMyrI_9qIUpghLILgA";
 
 const CAT_KEY = "tasksuiyoichi-categories";
 const DEFAULT_CATS = ["家事", "買い物", "お出かけ"];
-const REACTIONS = ["👍", "❤️", "😊", "🔥", "👀"];
 const ASSIGNEES = ["はやて", "ひとみ", "ふたり"];
 
-// Simple Supabase REST helper (no SDK needed)
 async function sbFetch(path, options = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     ...options,
@@ -24,10 +18,7 @@ async function sbFetch(path, options = {}) {
       ...(options.headers || {})
     }
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err);
-  }
+  if (!res.ok) { const err = await res.text(); throw new Error(err); }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
@@ -42,11 +33,9 @@ function Confetti({ active }) {
   useEffect(() => {
     if (!active) return;
     setParticles(Array.from({ length: 18 }, (_, i) => ({
-      id: i,
-      x: Math.random() * 100,
+      id: i, x: Math.random() * 100,
       color: ["#f4a7b9","#a8d5ba","#c3b1e1","#f9d89c","#a8c8f0"][i % 5],
-      delay: Math.random() * 0.3,
-      size: 5 + Math.random() * 5
+      delay: Math.random() * 0.3, size: 5 + Math.random() * 5
     })));
     const t = setTimeout(() => setParticles([]), 1100);
     return () => clearTimeout(t);
@@ -70,6 +59,7 @@ function Confetti({ active }) {
 function TaskItem({ task, onUpdate, onDelete, categories }) {
   const [open, setOpen] = useState(false);
   const [memo, setMemo] = useState("");
+  const [memoAuthor, setMemoAuthor] = useState("はやて");
   const [boom, setBoom] = useState(false);
 
   const toggleDone = () => {
@@ -80,18 +70,8 @@ function TaskItem({ task, onUpdate, onDelete, categories }) {
 
   const addMemo = () => {
     if (!memo.trim()) return;
-    onUpdate({ ...task, memos: [...(task.memos||[]), { text: memo.trim(), at: new Date().toISOString(), reactions: {} }] });
+    onUpdate({ ...task, memos: [...(task.memos||[]), { text: memo.trim(), at: new Date().toISOString(), author: memoAuthor }] });
     setMemo("");
-  };
-
-  const addReaction = (memoIdx, emoji) => {
-    const memos = (task.memos||[]).map((m, i) => {
-      if (i !== memoIdx) return m;
-      const reactions = { ...m.reactions };
-      reactions[emoji] = (reactions[emoji] || 0) + 1;
-      return { ...m, reactions };
-    });
-    onUpdate({ ...task, memos });
   };
 
   const setAssignee = (a) => onUpdate({ ...task, assignee: task.assignee === a ? null : a });
@@ -177,17 +157,9 @@ function TaskItem({ task, onUpdate, onDelete, categories }) {
             {(task.memos||[]).map((m, i) => (
               <div key={i} style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 13, color: "#333", lineHeight: 1.6 }}>{m.text}</div>
-                <div style={{ fontSize: 11, color: "#bbb", marginBottom: 4 }}>{formatDate(m.at)}</div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {REACTIONS.map(e => (
-                    <button key={e} onClick={() => addReaction(i, e)} style={{
-                      background: "#f8f8f8", border: "1px solid #eee",
-                      borderRadius: 12, padding: "2px 7px", cursor: "pointer",
-                      fontSize: 12, display: "flex", alignItems: "center", gap: 3
-                    }}>
-                      {e}{m.reactions?.[e] ? <span style={{ fontSize: 10, color: "#888" }}>{m.reactions[e]}</span> : null}
-                    </button>
-                  ))}
+                <div style={{ fontSize: 11, color: "#bbb", marginBottom: 4 }}>
+                  {m.author && <span style={{ fontWeight: 600, marginRight: 4 }}>{m.author}</span>}
+                  {formatDate(m.at)}
                 </div>
               </div>
             ))}
@@ -195,6 +167,16 @@ function TaskItem({ task, onUpdate, onDelete, categories }) {
               <div style={{ fontSize: 13, color: "#ccc", marginBottom: 8 }}>まだメモがありません</div>
             )}
 
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              {["はやて", "ひとみ"].map(a => (
+                <button key={a} onClick={() => setMemoAuthor(a)} style={{
+                  fontSize: 11, padding: "3px 10px", borderRadius: 10, cursor: "pointer",
+                  border: `1px solid ${memoAuthor === a ? "#333" : "#e0e0e0"}`,
+                  background: memoAuthor === a ? "#111" : "transparent",
+                  color: memoAuthor === a ? "#fff" : "#888", fontFamily: "inherit"
+                }}>{a}</button>
+              ))}
+            </div>
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
               <input
                 value={memo}
@@ -217,35 +199,6 @@ function TaskItem({ task, onUpdate, onDelete, categories }) {
   );
 }
 
-// ── Snapshot card (for LINE sharing image) ──────────────────
-function SnapshotCard({ tasks }) {
-  const done = tasks.filter(t => t.done).length;
-  const todo = tasks.filter(t => !t.done).slice(0, 5);
-  return (
-    <div id="snapshot-card" style={{
-      width: 400, background: "#fff", border: "1.5px solid #e8e8e8",
-      borderRadius: 16, padding: "20px 24px", fontFamily: "'Hiragino Sans','Noto Sans JP',sans-serif"
-    }}>
-      <div style={{ fontSize: 17, fontWeight: 700, color: "#111", marginBottom: 4 }}>タスク水洋一</div>
-      <div style={{ fontSize: 12, color: "#aaa", marginBottom: 14 }}>{done} / {tasks.length} 完了</div>
-      <div style={{ height: 4, background: "#f0f0f0", borderRadius: 2, marginBottom: 16 }}>
-        <div style={{ height: "100%", borderRadius: 2, width: tasks.length ? `${(done/tasks.length)*100}%` : "0%", background: "#333" }} />
-      </div>
-      {todo.map(t => (
-        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", border: "1.5px solid #333", flexShrink: 0 }} />
-          <div style={{ fontSize: 13, color: "#111" }}>{t.title}</div>
-          {t.assignee && <span style={{ fontSize: 10, color: "#888", marginLeft: "auto" }}>{t.assignee}</span>}
-        </div>
-      ))}
-      {tasks.length - done - todo.length > 0 && (
-        <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>他 {tasks.length - done - todo.length} 件...</div>
-      )}
-    </div>
-  );
-}
-
-// ── Main App ─────────────────────────────────────────────────
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState(() => {
@@ -256,7 +209,6 @@ export default function App() {
   const [catFilter, setCatFilter] = useState(null);
   const [showCatEditor, setShowCatEditor] = useState(false);
   const [newCat, setNewCat] = useState("");
-  const [showSnapshot, setShowSnapshot] = useState(false);
   const [copyMsg, setCopyMsg] = useState("");
   const [status, setStatus] = useState("loading");
   const [errDetail, setErrDetail] = useState("");
@@ -326,11 +278,10 @@ export default function App() {
     setTasks(t => t.map(task => task.category === c ? { ...task, category: null } : task));
   };
 
-  // ── Copy snapshot as text for LINE ──
   const copySnapshot = () => {
     const done = tasks.filter(t => t.done).length;
     const lines = [
-      `📋 タスク水洋一`,
+      "📋 タスク水洋一",
       `✅ ${done} / ${tasks.length} 完了`,
       "",
       ...tasks.filter(t => !t.done).map(t => `• ${t.title}${t.assignee ? `（${t.assignee}）` : ""}`)
@@ -350,9 +301,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#fff", fontFamily: "'Hiragino Sans','Noto Sans JP',sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet" />
-
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 20px" }}>
-        {/* Header */}
         <div style={{ padding: "32px 0 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 700, color: "#111", letterSpacing: -0.5 }}>タスク水洋一</div>
@@ -368,7 +317,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {copyMsg && <span style={{ fontSize: 11, color: "#888" }}>{copyMsg}</span>}
-            <button onClick={copySnapshot} title="LINEに共有" style={{
+            <button onClick={copySnapshot} style={{
               background: "#06C755", border: "none", borderRadius: 8,
               color: "#fff", fontSize: 12, padding: "6px 12px",
               cursor: "pointer", fontFamily: "inherit", fontWeight: 600
@@ -376,9 +325,6 @@ export default function App() {
           </div>
         </div>
 
-
-
-        {/* Input */}
         <div style={{ display: "flex", gap: 10, marginBottom: 20, borderBottom: "2px solid #111", paddingBottom: 10 }}>
           <input
             ref={inputRef}
@@ -395,7 +341,6 @@ export default function App() {
           }}>+</button>
         </div>
 
-        {/* Status filter */}
         <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
           {[["all","すべて"],["todo","未完了"],["done","完了"]].map(([v, l]) => (
             <button key={v} onClick={() => setFilter(v)} style={{
@@ -407,7 +352,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Category filter */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
           <button onClick={() => setCatFilter(null)} style={{
             fontSize: 11, padding: "3px 10px", borderRadius: 10, cursor: "pointer",
@@ -429,7 +373,6 @@ export default function App() {
           }}>＋編集</button>
         </div>
 
-        {/* Category editor */}
         {showCatEditor && (
           <div style={{ background: "#fafafa", borderRadius: 12, padding: "14px 16px", marginBottom: 16, border: "1px solid #f0f0f0" }}>
             <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>カテゴリ管理</div>
@@ -465,7 +408,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Task list */}
         {filtered.length === 0 && (
           <div style={{ textAlign: "center", padding: "48px 0", color: "#ccc", fontSize: 13 }}>
             {filter === "done" ? "完了したタスクはありません" : "タスクがありません"}
@@ -474,13 +416,6 @@ export default function App() {
         {filtered.map(task => (
           <TaskItem key={task.id} task={task} onUpdate={updateTask} onDelete={deleteTask} categories={categories} />
         ))}
-
-        {/* Snapshot preview */}
-        {showSnapshot && (
-          <div style={{ marginTop: 24 }}>
-            <SnapshotCard tasks={tasks} />
-          </div>
-        )}
 
         <div style={{ marginTop: 32, fontSize: 12, color: "#ccc", textAlign: "center", paddingBottom: 40 }}>
           URLをLINEで共有 · 4秒ごとに自動更新
